@@ -29,12 +29,23 @@ export type HandoffStep = { type: "handoff"; from: Agent; to: Agent };
 
 export type Step = ThinkingStep | ToolStep | HandoffStep;
 
+/** Tokens and cost of every model call in one answer (Module 5). */
+export type Stats = {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  /** How many agent calls it took (2 when Copper handed off). */
+  agentCalls: number;
+};
+
 export type Progress = {
   steps: Step[];
   reply: string;
   status: "working" | "done" | "error";
   /** Who wrote the reply. Copper unless set. */
   agent?: Agent;
+  /** Tokens and cost so far, filled in as each agent call finishes. */
+  stats?: Stats;
 };
 
 /** Every tool call in an answer, in order. */

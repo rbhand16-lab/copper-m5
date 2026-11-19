@@ -1,8 +1,14 @@
 name: CI
 
+# Runs on every pull request, and on main after a merge.
+# Branch protection on main requires these checks (see docs/architecture.md).
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -23,3 +29,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # The golden-set evaluation: real questions to Ask Copper, graded by an AI
+  # judge, scores saved in Langfuse. It fails when the answers are not good
+  # enough, and when a key is missing (CI never skips it).
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run eval
+        env:
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_TRACING_ENVIRONMENT: ci
