@@ -280,8 +280,10 @@ export async function askCopper({
           }
           progress.status = "done";
           if (!progress.reply.trim()) progress.reply = SORRY;
-        } catch {
+        } catch (error) {
           progress.status = "error";
+          progress.error =
+            error instanceof Error ? error.message : String(error);
           if (!progress.reply.trim()) progress.reply = SORRY;
         }
         turn.update({

@@ -30,6 +30,12 @@ export function isAiConfigured(): boolean {
   return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 }
 
+/**
+ * Retries for a failed request (rate limits, busy servers), with growing
+ * waits. The SDK default of 2 is too few when many questions run at once.
+ */
+const MAX_RETRIES = 5;
+
 /** Which module and feature made the call, for the ai_calls log. */
 export type CallInfo = { module: number; feature: string; model?: ModelId };
 
@@ -120,6 +126,7 @@ export async function callText(info: CallInfo, options: TextOptions) {
   return tracked(info, (model) =>
     generateText({
       telemetry: { functionId: info.feature },
+      maxRetries: MAX_RETRIES,
       ...options,
       model: languageModel(model),
     }),
@@ -135,6 +142,7 @@ export async function callObject<Schema extends z.ZodType>(
   const result = await tracked(info, (model) =>
     generateText({
       telemetry: { functionId: info.feature },
+      maxRetries: MAX_RETRIES,
       ...rest,
       model: languageModel(model),
       output: Output.object({ schema }),
@@ -199,6 +207,7 @@ export function callStream(info: CallInfo, options: StreamOptions) {
   const row = rowFor(info, model, performance.now());
   return streamText({
     telemetry: { functionId: info.feature },
+    maxRetries: MAX_RETRIES,
     ...options,
     model: languageModel(model),
     onFinish: ({ totalUsage }) => logCall(row(true, totalUsage)),

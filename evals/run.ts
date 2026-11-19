@@ -9,13 +9,16 @@ import { flushTracing, ensureTracing } from "@/lib/ai/tracing";
 import { finalValue } from "@/lib/ai/live";
 import { askCopper } from "@/lib/copper/assistant/ask";
 import type { SupportMode } from "@/lib/copper/assistant/mode";
-import { toolCallsOf } from "@/lib/copper/assistant/progress";
+import { type Progress, toolCallsOf } from "@/lib/copper/assistant/progress";
 import type { Desk } from "@/lib/copper/orders";
 import { type GoldenCase, GOLDEN_SET } from "./golden-set";
 import { judgeAnswer } from "./judge";
 import { type CaseResult, summarize, type Summary } from "./report";
 
 export const DATASET = "copper-golden-set";
+
+/** Tries per question when the model errors out. */
+const ATTEMPTS = 3;
 
 /** Loads .env.local for local runs. In CI the keys are Actions secrets. */
 export function loadLocalEnv() {
@@ -101,21 +104,32 @@ export async function runGoldenSet(
     task: async (item): Promise<Output> => {
       const input = item.input as Input;
       const started = performance.now();
-      const { progress } = await askCopper({
-        messages: [{ role: "user", content: input.question }],
-        useTools: true,
-        desk: input.desk,
-        mode,
-      });
-      const final = await finalValue(progress);
+      // A model error (a rate limit, a busy server) is not a wrong answer, so
+      // try the question again before grading it.
+      let final: Awaited<ReturnType<typeof finalValue<Progress>>> | undefined;
+      for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+        const { progress } = await askCopper({
+          messages: [{ role: "user", content: input.question }],
+          useTools: true,
+          desk: input.desk,
+          mode,
+        });
+        final = await finalValue(progress);
+        if (final.status !== "error") break;
+        console.warn(
+          `[eval] ${input.question.slice(0, 40)}: attempt ${attempt} failed: ${final.error ?? "unknown error"}`,
+        );
+        await new Promise((r) => setTimeout(r, 5000 * attempt));
+      }
+      const last = final!;
       return {
-        reply: final.reply,
-        tools: toolCallsOf(final),
-        agent: final.agent ?? "copper",
-        agentCalls: final.stats?.agentCalls ?? 0,
+        reply: last.reply,
+        tools: toolCallsOf(last),
+        agent: last.agent ?? "copper",
+        agentCalls: last.stats?.agentCalls ?? 0,
         tokens:
-          (final.stats?.inputTokens ?? 0) + (final.stats?.outputTokens ?? 0),
-        costUsd: final.stats?.costUsd ?? 0,
+          (last.stats?.inputTokens ?? 0) + (last.stats?.outputTokens ?? 0),
+        costUsd: last.stats?.costUsd ?? 0,
         seconds: (performance.now() - started) / 1000,
       };
     },

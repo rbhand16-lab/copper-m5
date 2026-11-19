@@ -46,6 +46,8 @@ export type Progress = {
   agent?: Agent;
   /** Tokens and cost so far, filled in as each agent call finishes. */
   stats?: Stats;
+  /** What went wrong, when status is "error" (for logs and the eval, not the customer). */
+  error?: string;
 };
 
 /** Every tool call in an answer, in order. */
