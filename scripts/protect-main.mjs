@@ -3,6 +3,7 @@
 // and nobody (admins too) can push straight to main.
 // Needs the GitHub CLI, logged in as the owner of the repo.
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 // The names GitHub shows for the jobs in .github/workflows/ci.yml.
 export const REQUIRED_CHECKS = [
@@ -40,7 +41,7 @@ function gh(args, input) {
   return result;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const repo = gh([
     "repo",
     "view",
