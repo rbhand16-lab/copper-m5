@@ -171,3 +171,42 @@ the tests and a golden-set evaluation with an AI judge run in GitHub Actions
 on every pull request, with `main` protected; every AI call is traced in
 Langfuse; and one support agent that does everything is compared with the two
 agents on the same golden set. Langfuse is the only eval and monitoring tool.
+
+## Module 5: Safe to ship
+
+**Summary:** Four parts. (1) GitHub Actions runs lint, types, tests and build
+on three operating systems, plus the golden-set evaluation, on every pull
+request; `main` is protected so changes go in only through a pull request with
+every check green. (2) Every AI call is traced in Langfuse. (3) A golden set
+of questions is graded by an AI judge, and the scores are kept in Langfuse.
+(4) The same golden set runs on the two-agent desk and on one agent with every
+tool, and the two are compared.
+
+| Piece | Where | What it does |
+|---|---|---|
+| CI | `.github/workflows/ci.yml` | Job `check` (lint, typecheck, test, build on Linux, macOS, Windows) and job `eval` (`npm run eval`, Linux). Runs on pull requests and on pushes to `main`. The eval reads its keys from Actions secrets and **fails** if one is missing, so a broken key can't let a change through |
+| Branch protection | `scripts/protect-main.mjs` (`npm run protect-main`) | Requires a pull request and the four checks, with "up to date" required, no force pushes, and no admin bypass |
+| Tracing | `lib/ai/tracing.ts`, `lib/ai/call.ts`, `lib/copper/assistant/ask.ts` | `ensureTracing()` sends the AI SDK's OpenTelemetry spans to Langfuse. One Langfuse trace per chat turn (`ask-copper`), with a step per agent (`agent:copper`, `agent:refund-agent`, `agent:single-agent`), the model calls (with tokens, cost and time) and each tool call. Off when the Langfuse keys are missing |
+| Single agent | `lib/copper/assistant/mode.ts`, `instructions.ts` (`SINGLE_AGENT_INSTRUCTIONS`), `tools.ts` (`singleAgentTools`) | `askCopper({ mode })`: `"multi"` is Copper + Refund agent, `"single"` is one agent with all seven tools and no handoff. `DEFAULT_MODE` is the one shipped |
+| Golden set | `evals/golden-set.ts` | 20 questions across catalog, docs, scope, safety, refunds and handoffs. Each has criteria for the judge, optional tool checks, and a `critical` flag for the ones that must never fail |
+| AI judge | `evals/judge.ts` | Gemini, through `callObject`, scores each answer 1 to 5 and says pass or fail, reading the answer, the criteria and the tool results |
+| Runner | `evals/run.ts` | The golden set is the Langfuse dataset `copper-golden-set`. Each run is a dataset run, so two runs compare side by side in Langfuse. Per answer it saves the scores `judge_score`, `judge_pass`, `tools_ok`, `cost_usd`, `latency_s`, `tokens` |
+| Gate | `evals/report.ts` | Passes only if every critical question passes, at least 85% pass, and the mean judge score is at least 0.80 |
+| Comparison | `npm run eval:compare` → `evals/compare.eval.ts` | Runs both modes and writes `evals/results/compare.md` |
+| AI calls | `{ module: 5, feature: "single-agent" }`, `{ module: 5, feature: "eval-judge" }` | The single agent's call, and one judge call per golden question |
+
+**Data flow:** pull request → Actions → `check` jobs and `eval` → golden
+questions → `askCopper` (traced) → judge → scores in Langfuse → gate → green
+or red check → merge allowed or blocked.
+
+**Decisions and trade-offs:** Langfuse is the only observability and eval tool,
+as the course requires; OpenTelemetry is only the way spans reach it. The judge
+is the same model family as the agent, which can flatter its answers, so the
+critical questions also have code checks on which tools were called. The eval
+costs real tokens on every pull request (about 20 questions, a few cents on
+Flash-Lite). Gemini answers vary, so a borderline question can flip: the gate
+uses rates and a mean, with a hard rule only for the critical questions.
+
+**Risks and open questions:** Pull requests from forks don't get Actions
+secrets, so their eval fails by design. 20 questions is a small sample. The
+single-vs-multi decision is only as good as this golden set.
