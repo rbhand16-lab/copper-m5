@@ -1,16 +1,14 @@
 // Prints and saves the results of an eval run.
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import type { RunResult } from "./run";
 import { caseTable, gate } from "./report";
 
-/** Writes evals/results/<name>.json and .md, prints the table, and adds it to the GitHub Actions summary. */
+/** Writes evals/results/<name>.json and .md, and prints the table. CI shows it on the pull request (see ci.yml). */
 export function publish(name: string, markdown: string, data: unknown) {
   mkdirSync("evals/results", { recursive: true });
   writeFileSync(`evals/results/${name}.json`, JSON.stringify(data, null, 2));
   writeFileSync(`evals/results/${name}.md`, markdown);
   console.log(`\n${markdown}\n`);
-  if (process.env.GITHUB_STEP_SUMMARY)
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
 }
 
 export function runMarkdown(run: RunResult): string {
