@@ -9,10 +9,13 @@ import {
   type ModelId,
 } from "@/lib/ai/models";
 import { costUsd } from "@/lib/ai/pricing";
+import { ensureTracing } from "@/lib/ai/tracing";
 
 // Every model call in the app goes through this file, so each one is logged
 // with its tokens, cost and how long it took. The log goes to the terminal
 // running the app, as a line starting "[ai_calls]".
+// Module 5: each call is also traced in Langfuse (lib/ai/tracing.ts), named
+// after its feature.
 
 export class AiNotConfiguredError extends Error {
   constructor() {
@@ -26,6 +29,12 @@ export class AiNotConfiguredError extends Error {
 export function isAiConfigured(): boolean {
   return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 }
+
+/**
+ * Retries for a failed request (rate limits, busy servers), with growing
+ * waits. The SDK default of 2 is too few when many questions run at once.
+ */
+const MAX_RETRIES = 5;
 
 /** Which module and feature made the call, for the ai_calls log. */
 export type CallInfo = { module: number; feature: string; model?: ModelId };
@@ -52,6 +61,7 @@ export type AiCallRow = {
 };
 
 function google() {
+  ensureTracing();
   const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
   if (!googleKey) throw new AiNotConfiguredError();
   return createGoogleGenerativeAI({ apiKey: googleKey });
@@ -114,7 +124,12 @@ async function tracked<T extends { usage: Usage }>(
 /** Generates text. Example: callText({ module: 3, feature: "support-answer" }, { prompt }) */
 export async function callText(info: CallInfo, options: TextOptions) {
   return tracked(info, (model) =>
-    generateText({ ...options, model: languageModel(model) }),
+    generateText({
+      telemetry: { functionId: info.feature },
+      maxRetries: MAX_RETRIES,
+      ...options,
+      model: languageModel(model),
+    }),
   );
 }
 
@@ -126,6 +141,8 @@ export async function callObject<Schema extends z.ZodType>(
   const { schema, ...rest } = options;
   const result = await tracked(info, (model) =>
     generateText({
+      telemetry: { functionId: info.feature },
+      maxRetries: MAX_RETRIES,
       ...rest,
       model: languageModel(model),
       output: Output.object({ schema }),
@@ -160,6 +177,7 @@ export async function callEmbedMany(
     });
   try {
     const result = await embedMany({
+      telemetry: { functionId: info.feature },
       model: google().embedding(EMBEDDING_MODEL.slice("google/".length)),
       values,
       providerOptions: {
@@ -188,6 +206,8 @@ export function callStream(info: CallInfo, options: StreamOptions) {
   const model = info.model ?? defaultModel();
   const row = rowFor(info, model, performance.now());
   return streamText({
+    telemetry: { functionId: info.feature },
+    maxRetries: MAX_RETRIES,
     ...options,
     model: languageModel(model),
     onFinish: ({ totalUsage }) => logCall(row(true, totalUsage)),

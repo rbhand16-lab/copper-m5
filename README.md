@@ -43,6 +43,9 @@ They're optional until a module needs them. Put them in `.env.local` (never comm
 | `npm run dev`                        | Start the dev server                                  |
 | `npm test`                           | Run the app's tests                                   |
 | `npm run lint` / `npm run typecheck` | Check code style and types                            |
+| `npm run eval`                       | Grade Ask Copper on the golden set (needs the keys)   |
+| `npm run eval:compare`               | Run the golden set on one agent and on two, compare   |
+| `npm run protect-main`               | Protect `main`: pull request and passing checks only  |
 | `npm run format`                     | Format the code with Prettier                         |
 | `npm run start-module`               | One-time setup after cloning a module branch          |
 | `npm run env:check`                  | List the variables in `.env.local`, values masked     |

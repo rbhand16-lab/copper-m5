@@ -293,8 +293,8 @@ export const transferToRefundAgent = tool({
   execute: async () => ({ handedTo: "Refund agent" }),
 });
 
-/** The Refund agent's own tools (Module 4). Copper can't use these. */
-export function refundAgentTools(desk: Desk) {
+/** The two refund tools (Module 4). Used by the Refund agent and the single agent. */
+export function refundTools(desk: Desk) {
   return {
     get_orders: tool({
       description:
@@ -310,6 +310,13 @@ export function refundAgentTools(desk: Desk) {
       }),
       execute: async ({ orderId }) => requestRefund(orderId, desk),
     }),
+  };
+}
+
+/** The Refund agent's own tools (Module 4). Copper can't use these. */
+export function refundAgentTools(desk: Desk) {
+  return {
+    ...refundTools(desk),
     transfer_to_copper: tool({
       description:
         "Hands the customer back to Copper for anything that isn't a refund (products, prices, stock, setup, policies). Copper answers next, so write no reply of your own.",
@@ -319,4 +326,9 @@ export function refundAgentTools(desk: Desk) {
       execute: async () => ({ handedTo: "Copper" }),
     }),
   };
+}
+
+/** Module 5: the single agent's tools: all of Copper's plus the refund tools, no handoffs. */
+export function singleAgentTools(desk: Desk) {
+  return { ...copperTools, ...refundTools(desk) };
 }
