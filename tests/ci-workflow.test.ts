@@ -18,6 +18,12 @@ describe("CI workflow", () => {
     expect(pkg.scripts.eval).toContain("golden.eval.ts");
   });
 
+  it("shows the eval scores on the pull request", () => {
+    expect(ci).toContain("pull-requests: write");
+    expect(ci).toContain("gh pr comment");
+    expect(ci).toContain("evals/results/golden.md");
+  });
+
   it("gives the eval its keys from Actions secrets, never typed in the file", () => {
     for (const key of [
       "GOOGLE_GENERATIVE_AI_API_KEY",
